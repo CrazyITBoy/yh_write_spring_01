@@ -1,6 +1,9 @@
 package com.yh.hand.write.demo.spring;
 
+import com.yh.hand.write.demo.exception.NotFundClassException;
+
 import java.io.File;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -10,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author 元胡
- * @date 2020/10/09 12:20 下午
+ * @since  2020/10/09 12:20 下午
  */
 public class AnnotationApplicationContext implements ApplicationContext {
     private Class config;
@@ -23,6 +26,100 @@ public class AnnotationApplicationContext implements ApplicationContext {
 
         // 只加载非原型（单列）的，非懒加载的类
         this.scanAndCreateBean();
+
+        // 依赖注入
+        initAndDi();
+    }
+
+    // 依赖注入
+    private void initAndDi() {
+        for (BeanDefinition beanDefinition : beanDefinitionMap.values()) {
+            // 懒加载不创建
+            if (beanDefinition.getLazy()) {
+                return;
+            }
+
+            // 原型不处理
+            if (beanDefinition.getScope().equals(ScopeEnum.prototype)) {
+                return;
+            }
+
+            // 创建bean
+            this.doCreateBean(beanDefinition);
+        }
+    }
+
+    private Object doCreateBean(BeanDefinition beanDefinition) {
+        try {
+            Object instance;
+            // 再次从单例对象查询 防止已经查询到了
+            if (beanDefinition.getScope().equals(ScopeEnum.singleton)
+                && (instance = singletonInstanceMap.get(beanDefinition.getBeanName())) != null) {
+                return instance;
+            }
+
+            // bean实例
+            instance = beanDefinition.getClazz().getDeclaredConstructor().newInstance();
+            // bean Class类
+            Class beanClass = beanDefinition.getClazz();
+            // 依赖注入
+            this.di(instance, beanClass);
+            if (beanDefinition.getScope().equals(ScopeEnum.singleton)) {
+                // 投入单例对象池
+                singletonInstanceMap.put(beanDefinition.getBeanName(), instance);
+            }
+            return instance;
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // 依赖注入
+    private void di(Object instance, Class beanClass) {
+        Field[] fields = beanClass.getFields();
+        if (fields.length == 0) {
+            return;
+        }
+
+        // 遍历属性查找需要注入的类 进行依赖注入
+        for (Field field : fields) {
+            if (!field.isAnnotationPresent(AutoWired.class)) {
+                continue;
+            }
+            String beanName = field.getName();
+            Object diInstance;
+            // 先从单例对象查询需要注入的bean对象
+            if ((diInstance = singletonInstanceMap.get(beanName)) != null) {
+                try {
+                    field.set(instance, diInstance);
+                    continue;
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+            // 单例对象池中没有则创建bean对象
+            BeanDefinition beanDefinition;
+            if ((beanDefinition = this.beanDefinitionMap.get(beanName)) == null) {
+                throw new NotFundClassException(
+                    "Not fund class error ! Di bean:" + beanDefinition.getClazz().getName());
+            }
+            if (!beanDefinition.getScope().equals(ScopeEnum.prototype)) {
+                diInstance = this.doCreateBean(beanDefinition);
+            }
+            try {
+                field.set(instance, diInstance);
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+
+        }
     }
 
     private void scanAndCreateBean() {
@@ -61,21 +158,6 @@ public class AnnotationApplicationContext implements ApplicationContext {
 
             // 缓存bean定义map
             beanDefinitionMap.put(beanName, beanDefinition);
-            Object instance = null;
-            try {
-                instance = beanClass.getDeclaredConstructor().newInstance();
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            } catch (NoSuchMethodException e) {
-                e.printStackTrace();
-            }
-
-            // 缓存单列bean
-            singletonInstanceMap.put(beanName, instance);
         }
 
     }
@@ -143,35 +225,12 @@ public class AnnotationApplicationContext implements ApplicationContext {
 
         // 原型的每次都生成
         if (beanDefinition.getScope().equals(ScopeEnum.prototype)) {
-            try {
-                return beanDefinition.getClazz().getDeclaredConstructor().newInstance();
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            } catch (NoSuchMethodException e) {
-                e.printStackTrace();
-            }
+            return this.doCreateBean(beanDefinition);
         }
 
         // 懒加载，第一次使用才加载类到singletonMap
         if (beanDefinition.getLazy()) {
-            Class clazz = beanDefinition.getClazz();
-            Object lazyInstance = null;
-            try {
-                lazyInstance = clazz.getDeclaredConstructor().newInstance();
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            } catch (NoSuchMethodException e) {
-                e.printStackTrace();
-            }
-            singletonInstanceMap.put(beanName, lazyInstance);
+            return this.doCreateBean(beanDefinition);
         }
         return null;
     }

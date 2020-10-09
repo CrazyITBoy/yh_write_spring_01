@@ -1,5 +1,6 @@
 package com.yh.hand.write.demo.service;
 
+import com.yh.hand.write.demo.spring.AutoWired;
 import com.yh.hand.write.demo.spring.Component;
 import com.yh.hand.write.demo.spring.Scope;
 import com.yh.hand.write.demo.spring.ScopeEnum;
@@ -11,4 +12,7 @@ import com.yh.hand.write.demo.spring.ScopeEnum;
 @Component("userService")
 @Scope(ScopeEnum.singleton)
 public class UserService {
+
+    @AutoWired
+    private UserDao userDao;
 }
