@@ -52,7 +52,7 @@ public class AnnotationApplicationContext implements ApplicationContext {
     private Object doCreateBean(BeanDefinition beanDefinition) {
         try {
             Object instance;
-            // 再次从单例对象查询 防止已经查询到了
+            // 优先从单例对象查询 可能存在在Di时就已经把蛋类对象放入池中了
             if (beanDefinition.getScope().equals(ScopeEnum.singleton)
                 && (instance = singletonInstanceMap.get(beanDefinition.getBeanName())) != null) {
                 return instance;
