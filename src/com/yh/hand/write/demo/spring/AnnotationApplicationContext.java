@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author 元胡
- * @since  2020/10/09 12:20 下午
+ * @since 2020/10/09 12:20 下午
  */
 public class AnnotationApplicationContext implements ApplicationContext {
     private Class config;
@@ -176,6 +176,11 @@ public class AnnotationApplicationContext implements ApplicationContext {
         URL resource = classLoader.getResource(scanPackage);
         // 文件夹
         File file = new File(resource.getFile());
+        this.loadClassFromResource(file, loadClasses, classLoader);
+        return loadClasses;
+    }
+
+    private void loadClassFromResource(File file, List<Class> loadClasses, ClassLoader classLoader) {
         // 遍历文件
         for (File listFile : file.listFiles()) {
             if (listFile.isFile()) {
@@ -204,8 +209,8 @@ public class AnnotationApplicationContext implements ApplicationContext {
                 }
                 loadClasses.add(beanClass);
             }
+            this.loadClassFromResource(listFile, loadClasses, classLoader);
         }
-        return loadClasses;
     }
 
     @Override
